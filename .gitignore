@@ -1,0 +1,39 @@
+# .gitignore for RateDrinksApi (.NET)
+
+# Ignore build output
+bin/
+obj/
+
+# Ignore user-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Ignore VS Code settings
+.vscode/
+
+# Ignore Mac system files
+.DS_Store
+
+# Ignore logs
+*.log
+
+# Ignore generated files
+*.GeneratedMSBuildEditorConfig.editorconfig
+*.FileListAbsolute.txt
+
+# Ignore secrets
+secrets.json
+
+# Allow source, configs, and project files
+!*.cs
+!*.csproj
+!*.sln
+!*.json
+!*.http
+!*.md
+!*.yml
+!*.xml
+!*.config
+!*.gitignore
