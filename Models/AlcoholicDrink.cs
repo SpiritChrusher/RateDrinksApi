@@ -1,11 +1,22 @@
-namespace RateDrinksApi.Models
-{
+namespace RateDrinksApi.Models;
 
-    public abstract class AlcoholicDrink : IAlcoholicDrink
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public double AlcoholContent { get; set; } // Percentage
-        public string Type { get; set; } = string.Empty;
-    }
+public enum AlcoholType
+{
+    Beer,
+    Wine,
+    Vodka,
+    Gin,
+    Whiskey,
+    Rum,
+    Tequila,
+    Brandy,
+    Other
+}
+
+public abstract class AlcoholicDrink
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public double AlcoholContent { get; set; } // Percentage
+    public AlcoholType Type { get; set; }
 }

@@ -1,188 +1,57 @@
-### Get hello world text
-GET http://localhost:5000/text
+### Get health status
+GET http://localhost:5000/health
 Accept: application/json
 
-### Get hello for a specific user
-GET http://localhost:5000/text/JohnDoe
+### Get all drinks
+GET http://localhost:5000/drinks
 Accept: application/json
 
-### --- BEER ENDPOINTS ---
-
-### Get all beers
-GET http://localhost:5000/beers
+### Get drink by id
+GET http://localhost:5000/drinks/1
 Accept: application/json
 
-### Get beer by id
-GET http://localhost:5000/beers/1
-Accept: application/json
-
-
-### Create one or more beers
-
-POST http://localhost:5000/beers
+### Create one or more drinks (Beer, Wine, Vodka)
+POST http://localhost:5000/drinks
 Content-Type: application/json
 
 [
-	{
-		"id": 0,
-		"name": "Sample Beer",
-		"type": "Lager",
-		"alcoholContent": 5.0
-	},
-	{
-		"id": 0,
-		"name": "Another Beer",
-		"type": "Ale",
-		"alcoholContent": 6.0
-	}
-]
-
-### Create a single beer (also valid)
-
-POST http://localhost:5000/beers
-Content-Type: application/json
-
-[
-	{
-		"id": 0,
-		"name": "Single Beer",
-		"type": "Stout",
-		"alcoholContent": 7.0
-	},
     {
-        "id": 1,
-        "name": "Second Beer",
-        "type": "Pilsner",
-        "alcoholContent": 4.5
-    }
-]
-
-### Update a beer
-PUT http://localhost:5000/beers/1
-Content-Type: application/json
-
-{
-	"id": 1,
-	"name": "Updated Beer",
-	"type": "Ale",
-	"alcoholContent": 6.0
+  "name": "Good wine",
+  "alcoholContent": 12.3,
+  "type": 1,
+  "wineType": 3,
+    "year": 2018,
+  "vineyard": "North Vineyard"
 }
-
-### Delete a beer
-DELETE http://localhost:5000/beers/1
-
-### --- WINE ENDPOINTS ---
-
-### Get all wines
-GET http://localhost:5000/wines
-Accept: application/json
-
-### Get wine by id
-GET http://localhost:5000/wines/1
-Accept: application/json
-
-
-### Create one or more wines
-
-POST http://localhost:5000/wines
-Content-Type: application/json
-
-[
-	{
-		"id": 0,
-		"name": "Sample Wine",
-		"type": "Red",
-		"alcoholContent": 12.5
-	},
-	{
-		"id": 0,
-		"name": "Another Wine",
-		"type": "White",
-		"alcoholContent": 13.0
-	}
 ]
 
-### Create a single wine (also valid)
-
-POST http://localhost:5000/wines
-Content-Type: application/json
-
-[
-	{
-		"id": 0,
-		"name": "Single Wine",
-		"type": "Rosé",
-		"alcoholContent": 11.0
-	}
-]
-
-### Update a wine
-PUT http://localhost:5000/wines/1
+### Update a drink
+PUT http://localhost:5000/drinks/1
 Content-Type: application/json
 {
-	"id": 1,
-	"name": "Updated Wine",
-	"type": "White",
-	"alcoholContent": 13.0
+    "id": 1,
+    "name": "Updated Beer",
+    "type": 0, // 0 = AlcoholType.Beer
+    "alcoholContent": 6.0,
+    "brewery": "Updated Brewery",
+    "beerType": 1 // 1 = BeerType.Ale
 }
 
-### Delete a wine
-DELETE http://localhost:5000/wines/1
+### Delete a drink
+DELETE http://localhost:5000/drinks/1
 
-### --- VODKA ENDPOINTS ---
-
-### Get all vodkas
-GET http://localhost:5000/vodkas
-Accept: application/json
-
-### Get vodka by id
-GET http://localhost:5000/vodkas/1
-Accept: application/json
-
-
-### Create one or more vodkas
-
-POST http://localhost:5000/vodkas
-Content-Type: application/json
-
-[
-	{
-		"id": 0,
-		"name": "Sample Vodka",
-		"type": "Plain",
-		"alcoholContent": 40.0
-	},
-	{
-		"id": 0,
-		"name": "Another Vodka",
-		"type": "Flavored",
-		"alcoholContent": 38.0
-	}
-]
-
-### Create a single vodka (also valid)
-
-POST http://localhost:5000/vodkas
-Content-Type: application/json
-
-[
-	{
-		"id": 0,
-		"name": "Single Vodka",
-		"type": "Premium",
-		"alcoholContent": 42.0
-	}
-]
-
-### Update a vodka
-PUT http://localhost:5000/vodkas/1
+### Create a rating
+POST http://localhost:5000/ratings
 Content-Type: application/json
 {
-	"id": 1,
-	"name": "Updated Vodka",
-	"type": "Flavored",
-	"alcoholContent": 38.0
+    "score": 5,
+    "drinkId": 1
 }
 
-### Delete a vodka
-DELETE http://localhost:5000/vodkas/1
+### Get all ratings for a drink
+GET http://localhost:5000/ratings/1
+Accept: application/json
+
+### Get average rating for a drink
+GET http://localhost:5000/ratings/1/average
+Accept: application/json

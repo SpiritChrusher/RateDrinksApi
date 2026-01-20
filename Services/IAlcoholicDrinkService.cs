@@ -3,12 +3,12 @@ using RateDrinksApi.Repositories;
 
 namespace RateDrinksApi.Services
 {
-    public interface IAlcoholicDrinkService<T> where T : IAlcoholicDrink
+    public interface IAlcoholicDrinkService
     {
-        IEnumerable<T> GetAll();
-        T? GetById(int id);
-        void Add(T drink);
-        void Update(T drink);
-        void Delete(int id);
+        IReadOnlyList<AlcoholicDrink> GetAllDrinks();
+        AlcoholicDrink? GetDrinkById(int id);
+        (IReadOnlyList<AlcoholicDrink> Added, IReadOnlyList<string> Errors) AddDrinks(IEnumerable<AlcoholicDrink> drinks);
+        (bool Success, bool NotFound, string? Error) UpdateDrink(int id, AlcoholicDrink drink);
+        (bool Success, bool NotFound) DeleteDrink(int id);
     }
 }

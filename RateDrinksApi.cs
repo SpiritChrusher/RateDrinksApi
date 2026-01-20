@@ -3,8 +3,13 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi;
 using RateDrinksApi;
 using RateDrinksApi.Models;
+using RateDrinksApi.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using RateDrinksApi.Repositories;
 using RateDrinksApi.Services;
+using RateDrinksApi.Extensions;
+using RateDrinksApi.Options;
 
 // System.Text.Json source generation context for serialization
 var drinksJsonOptions = new System.Text.Json.JsonSerializerOptions
@@ -12,7 +17,15 @@ var drinksJsonOptions = new System.Text.Json.JsonSerializerOptions
     TypeInfoResolver = DrinksJsonContext.Default
 };
 var builder = WebApplication.CreateBuilder(args);
-// Add services to the container.
+builder.Services.Configure<RateDrinksApi.Options.DatabaseOptions>(
+    builder.Configuration.GetSection("DatabaseSettings"));
+// Add services to the container.x
+builder.Services.AddOutputCache(options =>
+{
+    // Default cache duration for all endpoints (in seconds)
+    options.DefaultExpirationTimeSpan = TimeSpan.FromSeconds(30);
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -21,23 +34,24 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddOpenApi();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
+    options.SerializerOptions.TypeInfoResolverChain.Insert(0, DrinksJsonContext.Default)
+);
+
+builder.Services.AddScoped<IAlcoholicDrinkService, AlcoholicDrinkService>();
+builder.Services.AddDbContext<DrinksDbContext>((sp, options) =>
 {
-    options.SerializerOptions.TypeInfoResolverChain.Insert(0, DrinksJsonContext.Default);
+    var dbOpts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<RateDrinksApi.Options.DatabaseOptions>>().Value;
+    var configValue = dbOpts.ConnectionStrings.AZURE_SQL_CONNECTIONSTRING;
+    var connectionString = configValue == "USE_ENVIRONMENT_VARIABLE"
+        ? Environment.GetEnvironmentVariable("AZURE_SQL_CONNECTIONSTRING") ?? string.Empty
+        : configValue;
+    options.UseSqlServer(connectionString);
 });
 
-// Register repositories and services for drinks
-builder.Services.AddSingleton<IAlcoholicDrinkRepository<Beer>, InMemoryAlcoholicDrinkRepository<Beer>>();
-builder.Services.AddSingleton<IAlcoholicDrinkRepository<Wine>, InMemoryAlcoholicDrinkRepository<Wine>>();
-builder.Services.AddSingleton<IAlcoholicDrinkRepository<Vodka>, InMemoryAlcoholicDrinkRepository<Vodka>>();
+builder.Services.AddScoped<IRatingRepository, PgRatingRepository>();
+builder.Services.AddScoped<IRatingService, RatingService>();
+builder.Services.AddScoped<IAlcoholicDrinkService, AlcoholicDrinkService>();
 
-builder.Services.AddTransient<AlcoholicDrinkService<Beer>>();
-builder.Services.AddTransient<AlcoholicDrinkService<Wine>>();
-builder.Services.AddTransient<AlcoholicDrinkService<Vodka>>();
-/*
-builder.Services.AddSingleton<AlcoholicDrinkService<Beer>>();
-builder.Services.AddSingleton<AlcoholicDrinkService<Wine>>();
-builder.Services.AddSingleton<AlcoholicDrinkService<Vodka>>();
-*/
 // Add Rate Limiting
 builder.Services.AddRateLimiter(options =>
 {
@@ -62,6 +76,7 @@ builder.Services.AddRateLimiter(options =>
     });
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
+builder.Services.AddScoped<IRatingService, RatingService>();
 
 
 var app = builder.Build();
@@ -72,6 +87,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseOutputCache();
 
 // Exception handling middleware
 app.UseExceptionHandler(errorApp =>
@@ -89,126 +106,93 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 
-// Use rate limiting middleware
 app.UseRateLimiter();
 
-
-// ...existing code...
-
-
-// Endpoints
-app.MapGet("/text", () => {
-    System.Console.WriteLine("Endpoint /text called");
+app.MapGet("/health", () => {
     return "Hello From Net10!";
 }).RequireRateLimiting("default");
-app.MapGet("/text/{userName}", (string userName) => $"Hello {userName} From Net10!").RequireRateLimiting("default");
 
-// CRUD endpoints for Beer
-app.MapGet("/beers", (AlcoholicDrinkService<Beer> service) =>
-{
-    var beers = service.GetAll() ?? Enumerable.Empty<Beer>();
-    return Results.Json(beers, drinksJsonOptions);
-});
-app.MapGet("/beers/{id:int}", (int id, AlcoholicDrinkService<Beer> service) =>
-{
-    var beer = service.GetById(id);
 
-    return beer is not null ? Results.Json(beer, drinksJsonOptions) : Results.NotFound();
-#pragma warning restore IL2026 // Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code
-});
-app.MapPost("/beers", (List<Beer> beers, AlcoholicDrinkService<Beer> service) =>
+// Rating endpoints
+app.MapPost("/ratings", async (Rating rating, IRatingService ratingService) =>
 {
-    var added = new List<Beer>();
-    foreach (var beer in beers)
+    await ratingService.AddRatingAsync(rating);
+    return Results.Created($"/ratings", rating);
+});
+
+app.MapGet("/ratings/{drinkId}", async (int drinkId, IRatingService ratingService) =>
+{
+    var ratings = (await ratingService.GetRatingsForDrinkAsync(drinkId)).ToList();
+    return Results.Json(ratings, DrinksJsonContext.Default.ListRating);
+}).CacheOutput(p => p.Expire(TimeSpan.FromSeconds(30)).SetVaryByRouteValue("drinkId"));
+
+app.MapGet("/ratings/{drinkId:int}", async (int drinkId, IRatingService ratingService) =>
+{
+    var ratings = (await ratingService.GetRatingsForDrinkAsync(drinkId)).ToList();
+    return Results.Json(ratings, DrinksJsonContext.Default.ListRating);
+}).CacheOutput(p => p.Expire(TimeSpan.FromSeconds(30)).SetVaryByRouteValue("drinkId"));
+
+// Endpoint for average rating
+app.MapGet("/ratings/{drinkId}/average", async (int drinkId, IRatingService ratingService) =>
+{
+    var avg = await RatingExtensions.GetAverageRatingAsync(ratingService, drinkId);
+    return avg.HasValue
+        ? Results.Json(new AverageRatingResponse { DrinkId = drinkId, Average = avg.Value }, DrinksJsonContext.Default.AverageRatingResponse)
+        : Results.NotFound();
+});
+
+app.MapGet("/ratings/{drinkId:int}/average", async (int drinkId, IRatingService ratingService) =>
+{
+    var avg = await RatingExtensions.GetAverageRatingAsync(ratingService, drinkId);
+    return avg.HasValue
+        ? Results.Json(new AverageRatingResponse { DrinkId = drinkId, Average = avg.Value }, DrinksJsonContext.Default.AverageRatingResponse)
+        : Results.NotFound();
+});
+
+
+// Unified CRUD endpoints for all drink types
+app.MapGet("/drinks", (IAlcoholicDrinkService drinkService) =>
+{
+    var drinks = drinkService.GetAllDrinks().ToList();
+    return Results.Json(drinks, DrinksJsonContext.Default.ListAlcoholicDrink);
+});
+
+app.MapGet("/drinks/{id:int}", (int id, IAlcoholicDrinkService drinkService) =>
+{
+    var drink = drinkService.GetDrinkById(id);
+    return drink is not null
+        ? Results.Json(drink, DrinksJsonContext.Default.AlcoholicDrink)
+        : Results.NotFound();
+});
+
+app.MapPost("/drinks", (List<DrinkRecord> drinks, IAlcoholicDrinkService drinkService) =>
+{
+    // Convert DrinkRecord to AlcoholicDrink for validation and service logic
+    var alcoholicDrinks = drinks
+        .Select(AlcoholicDrinkService.FromRecord)
+        .Where(d => d is not null)
+        .Cast<AlcoholicDrink>()
+        .ToList();
+    var (added, errors) = drinkService.AddDrinks(alcoholicDrinks);
+    if (errors.Count > 0)
     {
-        service.Add(beer);
-        added.Add(beer);
+        return Results.BadRequest(new { errors });
     }
-    return Results.Created($"/beers", added);
+    return Results.Created($"/drinks", added);
 });
-app.MapPut("/beers/{id:int}", (int id, Beer beer, AlcoholicDrinkService<Beer> service) =>
+
+app.MapPut("/drinks/{id:int}", (int id, AlcoholicDrink drink, IAlcoholicDrinkService drinkService) =>
 {
-    if (service.GetById(id) is null) return Results.NotFound();
-    beer.Id = id;
-    service.Update(beer);
-    return Results.NoContent();
-});
-app.MapDelete("/beers/{id:int}", (int id, AlcoholicDrinkService<Beer> service) =>
-{
-    if (service.GetById(id) is null) return Results.NotFound();
-    service.Delete(id);
+    var (success, notFound, error) = drinkService.UpdateDrink(id, drink);
+    if (notFound) return Results.NotFound();
+    if (!success) return Results.BadRequest(new { error });
     return Results.NoContent();
 });
 
-// CRUD endpoints for Wine
-app.MapGet("/wines", (AlcoholicDrinkService<Wine> service) =>
+app.MapDelete("/drinks/{id:int}", (int id, IAlcoholicDrinkService drinkService) =>
 {
-    var wines = service.GetAll() ?? Enumerable.Empty<Wine>();
-    return Results.Json(wines, drinksJsonOptions);
-});
-app.MapGet("/wines/{id:int}", (int id, AlcoholicDrinkService<Wine> service) =>
-{
-    var wine = service.GetById(id);
-    return wine is not null ? Results.Json(wine, drinksJsonOptions) : Results.NotFound();
-});
-app.MapPost("/wines", (List<Wine> wines, AlcoholicDrinkService<Wine> service) =>
-{
-    var added = new List<Wine>();
-    foreach (var wine in wines)
-    {
-        service.Add(wine);
-        added.Add(wine);
-    }
-    return Results.Created($"/wines", added);
-});
-app.MapPut("/wines/{id:int}", (int id, Wine wine, AlcoholicDrinkService<Wine> service) =>
-{
-    if (service.GetById(id) is null) return Results.NotFound();
-    wine.Id = id;
-    service.Update(wine);
-    return Results.NoContent();
-});
-app.MapDelete("/wines/{id:int}", (int id, AlcoholicDrinkService<Wine> service) =>
-{
-    if (service.GetById(id) is null) return Results.NotFound();
-    service.Delete(id);
-    return Results.NoContent();
+    var (success, notFound) = drinkService.DeleteDrink(id);
+    return notFound ? Results.NotFound() : Results.NoContent();
 });
 
-// CRUD endpoints for Vodka
-app.MapGet("/vodkas", (AlcoholicDrinkService<Vodka> service) =>
-{
-    var vodkas = service.GetAll() ?? Enumerable.Empty<Vodka>();
-    return Results.Json(vodkas, drinksJsonOptions);
-});
-app.MapGet("/vodkas/{id:int}", (int id, AlcoholicDrinkService<Vodka> service) =>
-{
-    var vodka = service.GetById(id);
-    return vodka is not null ? Results.Json(vodka, drinksJsonOptions) : Results.NotFound();
-});
-app.MapPost("/vodkas", (List<Vodka> vodkas, AlcoholicDrinkService<Vodka> service) =>
-{
-    var added = new List<Vodka>();
-    foreach (var vodka in vodkas)
-    {
-        service.Add(vodka);
-        added.Add(vodka);
-    }
-    return Results.Created($"/vodkas", added);
-});
-app.MapPut("/vodkas/{id:int}", (int id, Vodka vodka, AlcoholicDrinkService<Vodka> service) =>
-{
-    if (service.GetById(id) is null) return Results.NotFound();
-    vodka.Id = id;
-    service.Update(vodka);
-    return Results.NoContent();
-});
-app.MapDelete("/vodkas/{id:int}", (int id, AlcoholicDrinkService<Vodka> service) =>
-{
-    if (service.GetById(id) is null) return Results.NotFound();
-    service.Delete(id);
-    return Results.NoContent();
-});
-
-// Terminal middleware that runs the endpoint pipeline
 app.Run();

@@ -1,43 +1,50 @@
+#if false
 using RateDrinksApi.Models;
+using RateDrinksApi.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace RateDrinksApi.Repositories
 {
-    // The IAlcoholicDrinkRepository interface has been moved to its own file.
-    // This class implements the interface for in-memory storage.
-    public class InMemoryAlcoholicDrinkRepository<T> : IAlcoholicDrinkRepository<T> where T : IAlcoholicDrink
+    public class EfDrinkRepository : IDrinkRepository
     {
-        private readonly List<T> _drinks = [];
-        private int _nextId = 1;
+        private readonly DrinksDbContext _db;
 
-        public IEnumerable<T> GetAll()
+        public EfDrinkRepository(DrinksDbContext db)
         {
-            Console.WriteLine($"[DEBUG] GetAll called. Drinks count: {_drinks.Count}");
-            foreach (var d in _drinks)
-                Console.WriteLine($"[DEBUG] Drink: Id={d.Id}, Name={d.Name}");
-            return _drinks;
+            _db = db;
         }
 
-        public T? GetById(int id) => _drinks.FirstOrDefault(d => d.Id == id);
-
-        public void Add(T drink)
+        public IEnumerable<DrinkRecord> GetAll()
         {
-            drink.Id = _nextId++;
-            _drinks.Add(drink);
-            Console.WriteLine($"[DEBUG] Add called. Added: Id={drink.Id}, Name={drink.Name}. Total now: {_drinks.Count}");
+            return _db.Drinks.AsNoTracking().ToList();
         }
 
-        public void Update(T drink)
+        public DrinkRecord? GetById(int id)
         {
-            var index = _drinks.FindIndex(d => d.Id == drink.Id);
-            if (index != -1)
-                _drinks[index] = drink;
+            return _db.Drinks.AsNoTracking().FirstOrDefault(d => d.Id == id);
+        }
+
+        public void Add(DrinkRecord drink)
+        {
+            _db.Drinks.Add(drink);
+            _db.SaveChanges();
+        }
+
+        public void Update(DrinkRecord drink)
+        {
+            _db.Drinks.Update(drink);
+            _db.SaveChanges();
         }
 
         public void Delete(int id)
         {
-            var drink = GetById(id);
+            var drink = _db.Drinks.FirstOrDefault(d => d.Id == id);
             if (drink != null)
-                _drinks.Remove(drink);
+            {
+                _db.Drinks.Remove(drink);
+                _db.SaveChanges();
+            }
         }
     }
 }
+#endif
