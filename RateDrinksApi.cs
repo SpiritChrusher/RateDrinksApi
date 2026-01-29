@@ -1,24 +1,71 @@
-﻿using System.Threading.RateLimiting;
+﻿using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi;
 using RateDrinksApi;
 using RateDrinksApi.Models;
-using RateDrinksApi.Data;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using RateDrinksApi.Repositories;
 using RateDrinksApi.Services;
 using RateDrinksApi.Extensions;
-using RateDrinksApi.Options;
 
 // System.Text.Json source generation context for serialization
 var drinksJsonOptions = new System.Text.Json.JsonSerializerOptions
 {
     TypeInfoResolver = DrinksJsonContext.Default
 };
+
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.Configure<RateDrinksApi.Options.DatabaseOptions>(
-    builder.Configuration.GetSection("DatabaseSettings"));
+var appName = builder.Environment.ApplicationName;
+
+// Add Azure App Configuration
+var appConfigUri = builder.Configuration["AppConfiguration"]!;
+builder.Configuration.AddAzureAppConfiguration(options =>
+{
+    options.Connect(new Uri(appConfigUri), new Azure.Identity.DefaultAzureCredential());
+});
+
+// JWT authentication with JWKS from blob storage using JWKSOptions
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var jwksUrl = builder.Configuration[$"{appName}:JWKS:Uri"];
+        // Reuse a static HttpClient for performance
+        var staticHttpClient = JwksHttpClient.Instance;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = "rate-drinks",
+            ValidAudience = "rate-drinks-users",
+            IssuerSigningKeyResolver = (token, securityToken, kid, validationParameters) =>
+            {
+                var jwksJson = staticHttpClient.GetStringAsync(jwksUrl).Result;
+                var jwks = new JsonWebKeySet(jwksJson);
+                return jwks.Keys;
+            }
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("admin", policy => policy.RequireRole("admin"));
+});
+
+// Add CORS policy to allow frontend
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend",
+        policy => policy
+            .WithOrigins("http://localhost:3000")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+    );
+});
+// Use app-scoped config for all options
+builder.Services.AddAppConfiguration(builder.Configuration, appName);
 // Add services to the container.x
 builder.Services.AddOutputCache(options =>
 {
@@ -37,20 +84,12 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, DrinksJsonContext.Default)
 );
 
-builder.Services.AddScoped<IAlcoholicDrinkService, AlcoholicDrinkService>();
-builder.Services.AddDbContext<DrinksDbContext>((sp, options) =>
-{
-    var dbOpts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<RateDrinksApi.Options.DatabaseOptions>>().Value;
-    var configValue = dbOpts.ConnectionStrings.AZURE_SQL_CONNECTIONSTRING;
-    var connectionString = configValue == "USE_ENVIRONMENT_VARIABLE"
-        ? Environment.GetEnvironmentVariable("AZURE_SQL_CONNECTIONSTRING") ?? string.Empty
-        : configValue;
-    options.UseSqlServer(connectionString);
-});
-
+builder.Services.AddScoped<IDrinksService, DrinksService>();
+// Register Cosmos DB repository for drinks
+builder.Services.AddScoped<IDrinksRepository, DrinksRepository>();
+builder.Services.AddScoped<IDrinksService, DrinksService>();
 builder.Services.AddScoped<IRatingRepository, PgRatingRepository>();
 builder.Services.AddScoped<IRatingService, RatingService>();
-builder.Services.AddScoped<IAlcoholicDrinkService, AlcoholicDrinkService>();
 
 // Add Rate Limiting
 builder.Services.AddRateLimiter(options =>
@@ -78,15 +117,18 @@ builder.Services.AddRateLimiter(options =>
 });
 builder.Services.AddScoped<IRatingService, RatingService>();
 
-
 var app = builder.Build();
-
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Use CORS before any endpoints
+app.UseCors("AllowFrontend");
 
 app.UseOutputCache();
 
@@ -118,81 +160,83 @@ app.MapPost("/ratings", async (Rating rating, IRatingService ratingService) =>
 {
     await ratingService.AddRatingAsync(rating);
     return Results.Created($"/ratings", rating);
-});
+}).RequireAuthorization();
 
-app.MapGet("/ratings/{drinkId}", async (int drinkId, IRatingService ratingService) =>
+app.MapGet("/ratings/{drinkId}", async (string drinkId, IRatingService ratingService) =>
 {
     var ratings = (await ratingService.GetRatingsForDrinkAsync(drinkId)).ToList();
     return Results.Json(ratings, DrinksJsonContext.Default.ListRating);
-}).CacheOutput(p => p.Expire(TimeSpan.FromSeconds(30)).SetVaryByRouteValue("drinkId"));
-
-app.MapGet("/ratings/{drinkId:int}", async (int drinkId, IRatingService ratingService) =>
-{
-    var ratings = (await ratingService.GetRatingsForDrinkAsync(drinkId)).ToList();
-    return Results.Json(ratings, DrinksJsonContext.Default.ListRating);
-}).CacheOutput(p => p.Expire(TimeSpan.FromSeconds(30)).SetVaryByRouteValue("drinkId"));
+}).CacheOutput(p => p.Expire(TimeSpan.FromSeconds(30)).SetVaryByRouteValue("drinkId")).RequireAuthorization();
 
 // Endpoint for average rating
-app.MapGet("/ratings/{drinkId}/average", async (int drinkId, IRatingService ratingService) =>
+app.MapGet("/ratings/{drinkId}/average", async (string drinkId, IRatingService ratingService) =>
 {
     var avg = await RatingExtensions.GetAverageRatingAsync(ratingService, drinkId);
     return avg.HasValue
         ? Results.Json(new AverageRatingResponse { DrinkId = drinkId, Average = avg.Value }, DrinksJsonContext.Default.AverageRatingResponse)
         : Results.NotFound();
-});
+}).RequireAuthorization();
 
-app.MapGet("/ratings/{drinkId:int}/average", async (int drinkId, IRatingService ratingService) =>
+app.MapGet("/ratings/{drinkId:int}/average", async (string drinkId, IRatingService ratingService) =>
 {
     var avg = await RatingExtensions.GetAverageRatingAsync(ratingService, drinkId);
     return avg.HasValue
         ? Results.Json(new AverageRatingResponse { DrinkId = drinkId, Average = avg.Value }, DrinksJsonContext.Default.AverageRatingResponse)
         : Results.NotFound();
-});
+}).RequireAuthorization();
 
 
 // Unified CRUD endpoints for all drink types
-app.MapGet("/drinks", (IAlcoholicDrinkService drinkService) =>
+app.MapGet("/drinks", (AlcoholType type, IDrinksService drinkService) =>
 {
-    var drinks = drinkService.GetAllDrinks().ToList();
+    var drinks = drinkService.GetAllDrinks(type).ToList();
     return Results.Json(drinks, DrinksJsonContext.Default.ListAlcoholicDrink);
-});
+}).RequireAuthorization();
 
-app.MapGet("/drinks/{id:int}", (int id, IAlcoholicDrinkService drinkService) =>
+app.MapGet("/drinks/{id}", (string id, IDrinksService drinkService) =>
 {
     var drink = drinkService.GetDrinkById(id);
     return drink is not null
         ? Results.Json(drink, DrinksJsonContext.Default.AlcoholicDrink)
         : Results.NotFound();
-});
+}).RequireAuthorization();
 
-app.MapPost("/drinks", (List<DrinkRecord> drinks, IAlcoholicDrinkService drinkService) =>
+app.MapPost("/drinks", (HttpContext http, List<AlcoholicDrink> drinks, IDrinksService drinkService) =>
 {
-    // Convert DrinkRecord to AlcoholicDrink for validation and service logic
-    var alcoholicDrinks = drinks
-        .Select(AlcoholicDrinkService.FromRecord)
-        .Where(d => d is not null)
-        .Cast<AlcoholicDrink>()
-        .ToList();
-    var (added, errors) = drinkService.AddDrinks(alcoholicDrinks);
+    if (!http.User.IsAdmin())
+        return Results.Forbid();
+        
+    // Id assignment is now handled in the repository layer
+    var (added, errors) = drinkService.AddDrinks(drinks);
     if (errors.Count > 0)
     {
         return Results.BadRequest(new { errors });
     }
     return Results.Created($"/drinks", added);
-});
+}).RequireAuthorization();
 
-app.MapPut("/drinks/{id:int}", (int id, AlcoholicDrink drink, IAlcoholicDrinkService drinkService) =>
+app.MapPut("/drinks/{id}", (HttpContext http, string id, AlcoholicDrink drink, IDrinksService drinkService) =>
 {
+    if (!http.User.IsAdmin())
+        return Results.Forbid();
+
     var (success, notFound, error) = drinkService.UpdateDrink(id, drink);
     if (notFound) return Results.NotFound();
     if (!success) return Results.BadRequest(new { error });
     return Results.NoContent();
-});
+}).RequireAuthorization();
 
-app.MapDelete("/drinks/{id:int}", (int id, IAlcoholicDrinkService drinkService) =>
+app.MapDelete("/drinks/{id}", (string id, IDrinksService drinkService) =>
 {
     var (success, notFound) = drinkService.DeleteDrink(id);
     return notFound ? Results.NotFound() : Results.NoContent();
-});
+}).RequireAuthorization();
 
 app.Run();
+
+// Static HttpClient for JWKS fetching
+public static class JwksHttpClient
+{
+    private static readonly HttpClient _instance = new();
+    public static HttpClient Instance => _instance;
+}

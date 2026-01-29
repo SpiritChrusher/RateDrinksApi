@@ -17,7 +17,7 @@ public class RatingService : IRatingService
         await _ratingRepository.AddRatingAsync(rating);
     }
 
-    public async Task<IEnumerable<Rating>> GetRatingsForDrinkAsync(int drinkId)
+    public async Task<IEnumerable<Rating>> GetRatingsForDrinkAsync(string drinkId)
     {
         return await _ratingRepository.GetRatingsForDrinkAsync(drinkId);
     }

@@ -1,22 +1,20 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
-namespace RateDrinksApi.Models
+namespace RateDrinksApi.Models;
+
+public class Rating
 {
-    public class Rating
-    {
-        [Key]
-        public int Id { get; set; }
+    [Key]
+    public int Id { get; set; }
 
-        [Required]
-        public int Score { get; set; } // e.g., 1-5 stars
+    [Required]
+    public int Score { get; set; } // e.g., 1-5 stars
 
-        [Required]
-        public int DrinkId { get; set; } // Foreign key to DrinkRecord
+    [Required]
+    public string DrinkId { get; set; } = string.Empty; // Foreign key to AlcoholicDrink (Cosmos DB)
 
-        [ForeignKey("DrinkId")]
-        public DrinkRecord Drink { get; set; }
+    [Required]
+    public string UserId { get; set; } = string.Empty;
 
-        // Optionally, add UserId or other fields for future expansion
-    }
+    public string Comment { get; set; } = string.Empty;
 }

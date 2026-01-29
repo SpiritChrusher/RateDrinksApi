@@ -12,24 +12,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.57.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.1" />
+    <PackageReference Include="Microsoft.Azure.AppConfiguration.AspNetCore" Version="8.4.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- <Compile Remove="Data/DrinksDbContext.cs" /> -->
-    <Compile Remove="Repositories/EfAlcoholicDrinkRepository.cs" />
     <Compile Remove="Repositories/EfRatingRepository.cs" />
-    <Compile Remove="Repositories/IAlcoholicDrinkRepository.cs" />
-    <Compile Remove="Repositories/AlcoholicDrinkRepository.cs" />
-    <Compile Remove="Repositories/IDrinkRepository.cs" />
     <Compile Remove="Utils/DrinkConversionUtil.cs" />
     <Compile Remove="Models/Compiled/**/*.cs" />
   </ItemGroup>

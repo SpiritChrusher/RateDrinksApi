@@ -15,7 +15,7 @@ public enum AlcoholType
 
 public abstract class AlcoholicDrink
 {
-    public int Id { get; set; }
+    public string? Id { get; set; } // CosmosDB id (e.g., Name + AlcoholContent)
     public string Name { get; set; } = string.Empty;
     public double AlcoholContent { get; set; } // Percentage
     public AlcoholType Type { get; set; }
