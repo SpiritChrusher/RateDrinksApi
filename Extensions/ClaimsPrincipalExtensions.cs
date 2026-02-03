@@ -6,7 +6,7 @@ public static class ClaimsPrincipalExtensions
 {
     public static bool IsAdmin(this ClaimsPrincipal user)
     {
-        var isAdminClaim = user.FindFirst("IsAdmin")?.Value;
+        var isAdminClaim = user.FindFirst("isAdmin")?.Value;
         return bool.TryParse(isAdminClaim, out var isAdmin) && isAdmin;
     }
 }

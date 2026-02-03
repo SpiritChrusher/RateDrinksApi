@@ -12,6 +12,23 @@ public class CosmosDrinksDb
     {
         var opts = options.Value;
         _client = new CosmosClient(opts.ConnectionString);
+        var db = _client.GetDatabase(opts.DatabaseName);
+        /*
+        System.Console.WriteLine("Ensuring Cosmos DB Database and Container exist...");
+        try
+        {
+            db.CreateContainerIfNotExistsAsync(new ContainerProperties
+            {
+                Id = opts.DrinksContainerName,
+                PartitionKeyPath = "/id"
+            }).GetAwaiter().GetResult();
+            System.Console.WriteLine("Cosmos DB Database and Container are ready.");
+        }
+        catch (CosmosException ex)
+        {
+            System.Console.WriteLine($"Error ensuring Cosmos DB setup: {ex.Message}");
+            throw;
+        }*/
         _container = _client.GetContainer(opts.DatabaseName, opts.DrinksContainerName);
     }
 

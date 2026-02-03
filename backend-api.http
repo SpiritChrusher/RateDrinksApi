@@ -1,57 +1,97 @@
+@drinkId = 1
+@bearerToken = <YOUR_BEARER_TOKEN_HERE>
+
 ### Get health status
 GET http://localhost:5000/health
 Accept: application/json
 
-### Get all drinks
-GET http://localhost:5000/drinks
+
+### Get all beers
+GET http://localhost:5000/drinks?type=Beer
+Accept: application/json
+
+### Get all wines
+GET http://localhost:5000/drinks?type=Wine
+Accept: application/json
+
+### Get all vodkas
+GET http://localhost:5000/drinks?type=Vodka
 Accept: application/json
 
 ### Get drink by id
-GET http://localhost:5000/drinks/1
+GET http://localhost:5000/drinks/{{drinkId}}
 Accept: application/json
+Authorization: Bearer {{bearerToken}}
 
 ### Create one or more drinks (Beer, Wine, Vodka)
 POST http://localhost:5000/drinks
 Content-Type: application/json
+Authorization: Bearer {{bearerToken}}
 
 [
-    {
-  "name": "Good wine",
-  "alcoholContent": 12.3,
-  "type": 1,
-  "wineType": 3,
-    "year": 2018,
-  "vineyard": "North Vineyard"
-}
+  {
+    "name": "Sample Beer",
+    "type": "Beer",
+    "alcoholContent": 5.2,
+    "bitterness": 35.5,
+    "color": "Amber",
+    "description": "A tasty amber ale."
+  },
+  {
+    "name": "Sample Wine",
+    "type": "Wine",
+    "alcoholContent": 13.5,
+    "grape": "Cabernet Sauvignon",
+    "origin": "France",
+    "color": "Red",
+    "description": "A fine French wine."
+  },
+  {
+    "name": "Sample Vodka",
+    "type": "Vodka",
+    "alcoholContent": 40.0,
+    "origin": "Russia",
+    "description": "Classic Russian vodka."
+  }
 ]
 
 ### Update a drink
-PUT http://localhost:5000/drinks/1
+PUT http://localhost:5000/drinks/{{drinkId}}
 Content-Type: application/json
+Authorization: Bearer {{bearerToken}}
 {
-    "id": 1,
-    "name": "Updated Beer",
-    "type": 0, // 0 = AlcoholType.Beer
-    "alcoholContent": 6.0,
-    "brewery": "Updated Brewery",
-    "beerType": 1 // 1 = BeerType.Ale
+  "id": "{{drinkId}}",
+  "name": "Updated Beer",
+  "type": 0,
+  "alcoholContent": 6.0,
+  "brewery": "Updated Brewery",
+  "beerType": 1,
+  "bitterness": 40.0,
+  "color": "Amber",
+  "description": "Updated description."
 }
 
 ### Delete a drink
-DELETE http://localhost:5000/drinks/1
+DELETE http://localhost:5000/drinks/{{drinkId}}
+Authorization: Bearer {{bearerToken}}
 
 ### Create a rating
 POST http://localhost:5000/ratings
 Content-Type: application/json
+Authorization: Bearer {{bearerToken}}
 {
-    "score": 5,
-    "drinkId": 1
+  "score": 5,
+  "drinkId": "{{drinkId}}",
+  "userId": "user-123",
+  "comment": "Great drink!"
 }
 
 ### Get all ratings for a drink
-GET http://localhost:5000/ratings/1
+GET http://localhost:5000/ratings/{{drinkId}}
 Accept: application/json
+Authorization: Bearer {{bearerToken}}
 
 ### Get average rating for a drink
-GET http://localhost:5000/ratings/1/average
+GET http://localhost:5000/ratings/{{drinkId}}/average
 Accept: application/json
+Authorization: Bearer {{bearerToken}}

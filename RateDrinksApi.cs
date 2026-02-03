@@ -8,6 +8,7 @@ using RateDrinksApi.Models;
 using RateDrinksApi.Repositories;
 using RateDrinksApi.Services;
 using RateDrinksApi.Extensions;
+using RateDrinksApi.Models.Dto;
 
 // System.Text.Json source generation context for serialization
 var drinksJsonOptions = new System.Text.Json.JsonSerializerOptions
@@ -187,48 +188,60 @@ app.MapGet("/ratings/{drinkId:int}/average", async (string drinkId, IRatingServi
 
 
 // Unified CRUD endpoints for all drink types
-app.MapGet("/drinks", (AlcoholType type, IDrinksService drinkService) =>
+
+app.MapGet("/drinks", async (AlcoholType type, IDrinksService drinkService) =>
 {
-    var drinks = drinkService.GetAllDrinks(type).ToList();
+    var drinks = await drinkService.GetAllDrinksAsync(type);
     return Results.Json(drinks, DrinksJsonContext.Default.ListAlcoholicDrink);
 }).RequireAuthorization();
 
-app.MapGet("/drinks/{id}", (string id, IDrinksService drinkService) =>
+
+app.MapGet("/drinks/{id}", async (string id, IDrinksService drinkService) =>
 {
-    var drink = drinkService.GetDrinkById(id);
+    var drink = await drinkService.GetDrinkByIdAsync(id);
     return drink is not null
         ? Results.Json(drink, DrinksJsonContext.Default.AlcoholicDrink)
         : Results.NotFound();
 }).RequireAuthorization();
 
-app.MapPost("/drinks", (HttpContext http, List<AlcoholicDrink> drinks, IDrinksService drinkService) =>
+
+
+app.MapPost("/drinks", async (HttpContext http, List<AddDrinkDto> drinkDtos, IDrinksService drinkService) =>
 {
     if (!http.User.IsAdmin())
         return Results.Forbid();
-        
-    // Id assignment is now handled in the repository layer
-    var (added, errors) = drinkService.AddDrinks(drinks);
+
+    var (drinks, errors) = drinkDtos.ToAlcoholicDrinks();
     if (errors.Count > 0)
-    {
         return Results.BadRequest(new { errors });
-    }
+
+    var (added, addErrors) = await drinkService.AddDrinksAsync(drinks);
+    if (addErrors.Count > 0)
+        return Results.BadRequest(new { errors = addErrors });
+    
     return Results.Created($"/drinks", added);
 }).RequireAuthorization();
 
-app.MapPut("/drinks/{id}", (HttpContext http, string id, AlcoholicDrink drink, IDrinksService drinkService) =>
+
+app.MapPut("/drinks/{id}", async (HttpContext http, string id, AlcoholicDrink drink, IDrinksService drinkService) =>
 {
     if (!http.User.IsAdmin())
         return Results.Forbid();
 
-    var (success, notFound, error) = drinkService.UpdateDrink(id, drink);
-    if (notFound) return Results.NotFound();
-    if (!success) return Results.BadRequest(new { error });
+    var (success, notFound, error) = await drinkService.UpdateDrinkAsync(id, drink);
+    if (notFound) 
+        return Results.NotFound();
+
+    if (!success) 
+        return Results.BadRequest(new { error });
+
     return Results.NoContent();
 }).RequireAuthorization();
 
-app.MapDelete("/drinks/{id}", (string id, IDrinksService drinkService) =>
+
+app.MapDelete("/drinks/{id}", async (string id, IDrinksService drinkService) =>
 {
-    var (success, notFound) = drinkService.DeleteDrink(id);
+    var (success, notFound) = await drinkService.DeleteDrinkAsync(id);
     return notFound ? Results.NotFound() : Results.NoContent();
 }).RequireAuthorization();
 

@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+
 namespace RateDrinksApi.Models;
 
 public enum AlcoholType
@@ -13,10 +16,14 @@ public enum AlcoholType
     Other
 }
 
-public abstract class AlcoholicDrink
+public class AlcoholicDrink
 {
-    public string? Id { get; set; } // CosmosDB id (e.g., Name + AlcoholContent)
+    [JsonProperty("id")]
+    public string Id { get; set; } = default!;
+    [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("alcoholContent")]
     public double AlcoholContent { get; set; } // Percentage
+    [JsonPropertyName("type")]
     public AlcoholType Type { get; set; }
 }

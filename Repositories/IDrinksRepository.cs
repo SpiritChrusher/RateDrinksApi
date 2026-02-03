@@ -2,11 +2,14 @@ using RateDrinksApi.Models;
 
 namespace RateDrinksApi.Repositories;
 
+using System.Threading.Tasks;
+using System.Collections.Generic;
+
 public interface IDrinksRepository
 {
-    IEnumerable<AlcoholicDrink> GetAll(AlcoholType? type = null);
-    AlcoholicDrink? GetById(string id);
-    void Add(AlcoholicDrink drink);
-    void Update(AlcoholicDrink drink);
-    void Delete(string id);
+    Task<List<AlcoholicDrink>> GetAllAsync(AlcoholType? type = null);
+    Task<AlcoholicDrink?> GetByIdAsync(string id);
+    Task AddAsync(AlcoholicDrink drink);
+    Task UpdateAsync(AlcoholicDrink drink);
+    Task DeleteAsync(string id);
 }

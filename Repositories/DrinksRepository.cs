@@ -13,28 +13,28 @@ namespace RateDrinksApi.Repositories
             _cosmosDb = cosmosDb;
         }
 
-        public IEnumerable<AlcoholicDrink> GetAll(AlcoholType? type = null)
-        {
-            string sql = type.HasValue
-                ? $"SELECT * FROM c WHERE c.Type = '{type.Value}'"
+
+        public async Task<List<AlcoholicDrink>> GetAllAsync(AlcoholType? type = null)
+        {            string sql = type.HasValue
+                ? $"SELECT * FROM c WHERE c.Type = {(int)type.Value}"
                 : "SELECT * FROM c";
             var query = _cosmosDb.Container.GetItemQueryIterator<AlcoholicDrink>(sql);
             var results = new List<AlcoholicDrink>();
             while (query.HasMoreResults)
             {
-                var response = query.ReadNextAsync().Result;
+                var response = await query.ReadNextAsync();
                 results.AddRange(response);
             }
             return results;
         }
 
-        public AlcoholicDrink? GetById(string id)
+        public async Task<AlcoholicDrink?> GetByIdAsync(string id)
         {
             var sql = $"SELECT * FROM c WHERE c.Id = '{id}'";
             var query = _cosmosDb.Container.GetItemQueryIterator<AlcoholicDrink>(sql);
             while (query.HasMoreResults)
             {
-                var response = query.ReadNextAsync().Result;
+                var response = await query.ReadNextAsync();
                 foreach (var drink in response)
                 {
                     if (drink != null) return drink;
@@ -43,24 +43,34 @@ namespace RateDrinksApi.Repositories
             return null;
         }
 
-        public void Add(AlcoholicDrink drink)
+        public async Task AddAsync(AlcoholicDrink drink)
         {
-            if (string.IsNullOrWhiteSpace(drink.Id))
+            string id = drink.Type.ToString(); //$"{drink.Name}_{drink.AlcoholContent}".Replace(" ", "").Replace(".", "").ToLowerInvariant();
+            drink.Id = id;
+            try
             {
-                // Simple deterministic Id: Name-Type-AlcoholContent
-                drink.Id = $"{drink.Name}-{drink.Type}-{drink.AlcoholContent}".Replace(" ", "").ToLowerInvariant();
+                //serialize to json to see the actual content being sent to Cosmos DB
+                var json = System.Text.Json.JsonSerializer.Serialize(drink); 
+                Console.WriteLine($"Serialized drink JSON: {json}");
+                var pk = new PartitionKey(drink.Type.ToString());
+                var response = await _cosmosDb.Container.UpsertItemAsync<AlcoholicDrink>(drink, pk);
+                Console.WriteLine($"Item created with RU charge: {response.RequestCharge}");
             }
-            _cosmosDb.Container.CreateItemAsync(drink).Wait();
+            catch (CosmosException cosmosEx) when (cosmosEx.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                // Item with the same Id already exists
+                throw new InvalidOperationException($"A drink with Id '{id}' already exists.", cosmosEx);
+            }
         }
 
-        public void Update(AlcoholicDrink drink)
+        public async Task UpdateAsync(AlcoholicDrink drink)
         {
-            _cosmosDb.Container.UpsertItemAsync(drink).Wait();
+            await _cosmosDb.Container.UpsertItemAsync(drink, new PartitionKey(drink.Id));
         }
 
-        public void Delete(string id)
+        public async Task DeleteAsync(string id)
         {
-            _cosmosDb.Container.DeleteItemAsync<AlcoholicDrink>(id, new PartitionKey(id)).Wait();
+            await _cosmosDb.Container.DeleteItemAsync<AlcoholicDrink>(id, new PartitionKey(id));
         }
     }
 }
