@@ -21,13 +21,13 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore ./RateDrinksApi/RateDrinksApi.csproj
+        run: dotnet restore ./RateDrinksApi.csproj
 
       - name: Build
-        run: dotnet build ./RateDrinksApi/RateDrinksApi.csproj --configuration Release --no-restore
+        run: dotnet build ./RateDrinksApi.csproj --configuration Release --no-restore
 
       - name: Publish self-contained
-        run: dotnet publish ./RateDrinksApi/RateDrinksApi.csproj --configuration Release --output ./publish --self-contained true --runtime linux-x64
+        run: dotnet publish ./RateDrinksApi.csproj --configuration Release --output ./publish --self-contained true --runtime linux-x64
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
