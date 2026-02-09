@@ -26,6 +26,12 @@ builder.Configuration.AddAzureAppConfiguration(options =>
     options.Connect(new Uri(appConfigUri), new Azure.Identity.DefaultAzureCredential());
 });
 
+// Add Application Insights telemetry
+builder.Services.AddApplicationInsightsTelemetry(options =>
+{
+    options.ConnectionString = builder.Configuration[$"{appName}:ApplicationInsights:ConnectionString"];
+});
+
 // JWT authentication with JWKS from blob storage using JWKSOptions
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -157,11 +163,13 @@ app.MapGet("/health", () => {
 
 
 // Rating endpoints
-app.MapPost("/ratings", async (Rating rating, IRatingService ratingService) =>
+app.MapPost("/ratings", async (Rating rating, IRatingService ratingService, ILogger<Rating> logger) =>
 {
+    logger.LogInformation("Adding a new rating for drink {DrinkId}", rating.DrinkId);
     await ratingService.AddRatingAsync(rating);
+    logger.LogInformation("Rating added successfully for drink {DrinkId}", rating.DrinkId);
     return Results.Created($"/ratings", rating);
-}).RequireAuthorization();
+    }).RequireAuthorization();
 
 app.MapGet("/ratings/{drinkId}", async (string drinkId, IRatingService ratingService) =>
 {
@@ -189,9 +197,11 @@ app.MapGet("/ratings/{drinkId:int}/average", async (string drinkId, IRatingServi
 
 // Unified CRUD endpoints for all drink types
 
-app.MapGet("/drinks", async (AlcoholType type, IDrinksService drinkService) =>
+app.MapGet("/drinks", async (AlcoholType type, IDrinksService drinkService, ILogger<Rating> logger) =>
 {
+    logger.LogInformation("Fetching drinks of type {Type}", type);
     var drinks = await drinkService.GetAllDrinksAsync(type);
+    logger.LogInformation("Fetched {Count} drinks of type {Type}", drinks.Count, type);
     return Results.Json(drinks, DrinksJsonContext.Default.ListAlcoholicDrink);
 }).RequireAuthorization();
 
